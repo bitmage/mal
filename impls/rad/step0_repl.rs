@@ -1,4 +1,4 @@
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 
 fn read(input: &str) -> String {
     input.to_string()

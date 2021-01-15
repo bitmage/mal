@@ -1,26 +1,37 @@
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::iter::Peekable;
 
-use types::{RadNode, RadList, RadLink, RadType};
+use types::{RadNode, RadList, RadType};
 
 #[cfg(test)]
 mod test {
-    use super::tokenize;
+    use super::*;
+
+    //#[test]
+    //fn tokenize_test() {
+        //let tests = [
+            //("(print 'hello')",
+                //vec!["(", "print", "'", "hello", "'", ")"]),
+            //("(list + 2 (list * 3 4))",
+                //vec!["(", "list", "+", "2", "(",
+                //"list", "*", "3", "4", ")", ")"]),
+        //];
+        //for (i, o) in tests.iter() {
+            //let res = tokenize(i);
+            //assert_eq!(&res[..], &o[..]);
+            //println!("tokenize result: {} -> {:?}", i, res);
+        //}
+    //}
 
     #[test]
-    fn tokenize_test() {
+    fn read_str_test() {
         let tests = [
             ("(print 'hello')",
-                vec!["(", "print", "'", "hello", "'", ")"]),
-            ("(list + 2 (list * 3 4))",
-                vec!["(", "list", "+", "2", "(",
-                "list", "*", "3", "4", ")", ")"]),
+                ()),
         ];
-        for (i, o) in tests.iter() {
-            let res = tokenize(i);
-            assert_eq!(&res[..], &o[..]);
-            println!("result: {} -> {:?}", i, res);
+        for (i, _rtypes) in tests.iter() {
+            let res = read_str(i).unwrap();
+            println!("read_str result: {} -> {}", i, res);
         }
     }
 }
@@ -44,8 +55,9 @@ pub fn read_str(input: &str) -> Option<RadNode> {
 }
 
 fn read_form(tokens: &Tokens, pos: usize) -> (Option<RadNode>, usize) {
-    let token = &tokens.get(pos);
-    match token.map(|t| t.as_str()) {
+    let token = &tokens.get(pos).map(|t| t.as_str());
+    token.map(|t| println!("read_form: {}", t));
+    match token {
         Some("(") => read_list(tokens, pos),
         Some(_) => read_atom(tokens, pos),
         None => (None, pos)
@@ -74,13 +86,15 @@ fn read_list(tokens: &Tokens, mut pos: usize) -> (Option<RadNode>, usize)
                 let (form, _pos) = read_form(tokens, pos);
                 pos = _pos;
                 args.push(form.unwrap());
+                //println!("adding to args: {:?}", args)
             },
         }
     }
     let node = RadNode {
-        src: "".to_string(),
+        src: "()".to_string(),
+        text: "()".to_string(),
         rtype: RadType::List,
-        args: RadList::new(),
+        args: args,
     };
     (Some(node), pos)
 }
@@ -88,9 +102,12 @@ fn read_list(tokens: &Tokens, mut pos: usize) -> (Option<RadNode>, usize)
 fn read_atom(tokens: &Tokens, pos: usize) -> (Option<RadNode>, usize)
 {
     // this should be safe because we peek before getting here
-    let src = tokens.get(pos).unwrap().to_string();
+    let src = tokens.get(pos).unwrap();
+
+    //println!("read_atom: {}", src);
     let node = RadNode {
-        src: src,
+        src: src.to_string(),
+        text: src.to_string(),
         rtype: RadType::RString,
         args: RadList::new(),
     };

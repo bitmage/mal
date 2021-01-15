@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate lazy_static;
 extern crate regex;
 
@@ -12,7 +11,7 @@ fn read(input: &str) -> String {
 }
 
 fn eval(input: &str) -> String {
-    input.to_string()
+    format!("{:?}", reader::read_str(input))
 }
 
 fn print(input: &str) -> String {

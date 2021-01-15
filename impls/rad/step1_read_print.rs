@@ -3,6 +3,7 @@ extern crate lazy_static;
 extern crate regex;
 
 mod reader;
+mod types;
 
 use std::io::{self, Write};
 

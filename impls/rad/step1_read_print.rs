@@ -7,19 +7,19 @@ mod types;
 use std::io::{self, Write};
 use types::RadNode;
 
-fn read(text: &str) -> Option<RadNode> {
+fn read(text: &str) -> io::Result<RadNode> {
     reader::read_str(text)
 }
 
-fn eval(tree: Option<RadNode>) -> Option<RadNode> {
+fn eval(tree: io::Result<RadNode>) -> io::Result<RadNode> {
     tree
 }
 
-fn print(tree: Option<RadNode>) -> String {
-    tree.map_or("EOF".to_string(), |t| format!("{}", t))
+fn print(tree: io::Result<RadNode>) -> io::Result<String> {
+    tree.map(|t| format!("{}", t))
 }
 
-fn rep(text: &str) -> String {
+fn rep(text: &str) -> io::Result<String> {
     let tree = read(&text);
     let results = eval(tree);
     let output = print(results);
@@ -35,8 +35,10 @@ fn main() -> io::Result<()> {
         if result == 0 {
             break
         }
-        let evaluated = rep(&input_buffer);
-        println!("{}", evaluated);
+        match rep(&input_buffer) {
+            Err(e) => println!("{}", e),
+            Ok(result) => println!("{}", result),
+        }
     }
     Ok(())
 }

@@ -1,5 +1,7 @@
 use lazy_static::lazy_static;
 use regex::Regex;
+use io;
+use std::fmt::Display;
 
 use types::{RadNode, RadList, RadType};
 
@@ -11,28 +13,37 @@ lazy_static! {static ref NUMBER: Regex = Regex::new(
     r#"^-?[0-9][0-9\.]+$"#
 ).unwrap();}
 
+macro_rules! assert_err {
+    ($expression:expr, $($pattern:tt)+) => {
+        match $expression {
+            $($pattern)+ => (),
+            ref e => panic!("expected `{}` but got `{:?}`", stringify!($($pattern)+), e),
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
 
     //#[test]
-    //fn tokenize_test() {
-        //let tests = [
-            //("(print 'hello')",
-                //vec!["(", "print", "'", "hello", "'", ")"]),
-            //("(list + 2 (list * 3 4))",
-                //vec!["(", "list", "+", "2", "(",
-                //"list", "*", "3", "4", ")", ")"]),
-        //];
-        //for (i, o) in tests.iter() {
-            //let res = tokenize(i);
-            //assert_eq!(&res[..], &o[..]);
-            //println!("tokenize result: {} -> {:?}", i, res);
-        //}
-    //}
+    fn tokenize_test() {
+        let tests = [
+            ("(print \"hello\")",
+                vec!["(", "print", "\"hello\"", ")"]),
+            ("(list + 2 (list * 3 4))",
+                vec!["(", "list", "+", "2", "(",
+                "list", "*", "3", "4", ")", ")"]),
+        ];
+        for (i, o) in tests.iter() {
+            let res = tokenize(i);
+            assert_eq!(&res[..], &o[..]);
+            println!("tokenize result: {} -> {:?}", i, res);
+        }
+    }
 
-    #[test]
-    fn read_str_test() {
+    //#[test]
+    fn read_str_identity() {
         let tests = [
             "(print \"hello\")",
             "(print \"hello world\")",
@@ -49,6 +60,29 @@ mod test {
             assert_eq!(*input, output.as_str());
         }
     }
+
+    #[test]
+    fn read_str_differ() {
+        let tests: Vec<(&str, Result<&str, &str>)> = vec![
+            ("\"abc", Err("EOF; Unterminated list!")),
+        ];
+        for (input, expected) in tests.iter() {
+            let res = read_str(input);
+            match expected {
+                Ok(message) => {
+                    println!("TESTING NORMAL OUTPUT");
+                    let output = format!("{}", res.unwrap());
+                    assert_eq!(*input, output.as_str());
+                },
+                Err(err) => {
+                    //let result = res.map_err(|e| { e.to_string() });
+                    println!("ERR MESSAGE: {:?}", res);
+                    assert_err!(res, err)
+                },
+            }
+
+        }
+    }
 }
 
 type Tokens = Vec<String>;
@@ -61,24 +95,35 @@ fn tokenize(input: &str) -> Tokens {
     tokens
 }
 
-pub fn read_str(input: &str) -> Option<RadNode> {
+pub fn read_str(input: &str) -> io::Result<RadNode> {
     let tokens = tokenize(input);
     //println!("tokens: {:?}", tokens);
     let (list, _) = read_form(&tokens, 0);
     list
 }
 
-fn read_form(tokens: &Tokens, pos: usize) -> (Option<RadNode>, usize) {
+fn read_form(tokens: &Tokens, pos: usize) -> (io::Result<RadNode>, usize) {
     let token = &tokens.get(pos).map(|t| t.as_str());
     match token {
-        Some("(") => read_list(tokens, pos),
+        Some("(") | Some("[") | Some("{") => read_list(tokens, pos),
         Some(_) => read_atom(tokens, pos),
-        None => (None, pos)
+        None => {
+            let e = io::Error::new(io::ErrorKind::UnexpectedEof, "Unexpected EOF.");
+            (Err(e), pos)
+        }
     }
 }
 
-fn read_list(tokens: &Tokens, mut pos: usize) -> (Option<RadNode>, usize)
+fn read_list(tokens: &Tokens, mut pos: usize) -> (io::Result<RadNode>, usize)
 {
+    // get starting token to determine list type
+    let end_token = match tokens[pos].as_str() {
+        "(" => ")",
+        "[" => "]",
+        "{" => "}",
+        _ => ")",
+    };
+
     // skip the opening '('
     pos += 1;
     let mut args = RadList::new();
@@ -87,17 +132,26 @@ fn read_list(tokens: &Tokens, mut pos: usize) -> (Option<RadNode>, usize)
     loop {
 
         _t = tokens.get(pos).map(|s| s.as_str());
+        _t.map(|t| println!("next list item: {:?}", t));
 
         match _t {
             // end the list
-            Some(")") => break,
-            None => panic!("Unterminated list!"),
+            Some(end) if end == end_token => break,
+            None => {
+                let e = io::Error::new(
+                    io::ErrorKind::UnexpectedEof, "EOF; Unterminated list!"
+                );
+                return (Err(e), 0);
+            },
 
             // process a list item
             Some(_) => {
                 let (form, _pos) = read_form(tokens, pos);
                 pos = _pos;
-                args.push(form.unwrap());
+                match form {
+                    Ok(f) => args.push(f),
+                    Err(e) => return (Err(e), pos),
+                }
                 //println!("adding to args: {:?}", args)
             },
         }
@@ -107,11 +161,11 @@ fn read_list(tokens: &Tokens, mut pos: usize) -> (Option<RadNode>, usize)
         rtype: RadType::List,
         args: args,
     };
-    (Some(node), pos)
+    (Ok(node), pos)
 }
 
 
-fn read_atom(tokens: &Tokens, pos: usize) -> (Option<RadNode>, usize)
+fn read_atom(tokens: &Tokens, pos: usize) -> (io::Result<RadNode>, usize)
 {
     // this should be safe because we peek before getting here
     let mut text = tokens[pos].as_str();
@@ -138,5 +192,5 @@ fn read_atom(tokens: &Tokens, pos: usize) -> (Option<RadNode>, usize)
         rtype: rtype,
         args: RadList::new(),
     };
-    (Some(node), pos + 1)
+    (Ok(node), pos + 1)
 }

@@ -1,7 +1,6 @@
 use lazy_static::lazy_static;
 use regex::Regex;
 use io;
-use std::fmt::Display;
 
 use types::{RadNode, RadList, RadType};
 
@@ -12,15 +11,6 @@ lazy_static! {static ref TOKEN: Regex = Regex::new(
 lazy_static! {static ref NUMBER: Regex = Regex::new(
     r#"^-?[0-9][0-9\.]+$"#
 ).unwrap();}
-
-macro_rules! assert_err {
-    ($expression:expr, $($pattern:tt)+) => {
-        match $expression {
-            $($pattern)+ => (),
-            ref e => panic!("expected `{}` but got `{:?}`", stringify!($($pattern)+), e),
-        }
-    }
-}
 
 #[cfg(test)]
 mod test {
@@ -42,7 +32,7 @@ mod test {
         }
     }
 
-    //#[test]
+    #[test]
     fn read_str_identity() {
         let tests = [
             "(print \"hello\")",
@@ -51,8 +41,9 @@ mod test {
             "abc",
             "(123 456)",
             "(+ 2 (* 3 4))",
+            "(() ())",
         ];
-        for (input) in tests.iter() {
+        for input in tests.iter() {
             let res = read_str(input).unwrap();
             //println!("read_str result: {} -> {}", input, res);
 
@@ -62,22 +53,31 @@ mod test {
     }
 
     #[test]
+    // test for explicit outputs or errors
     fn read_str_differ() {
         let tests: Vec<(&str, Result<&str, &str>)> = vec![
-            ("\"abc", Err("EOF; Unterminated list!")),
+            ("(   + 1   3 )", Ok("(+ 1 3)")),
+            ("\"abc", Err("EOF; No terminating quote on this string.")),
+            ("\\", Err("EOF; Expected escaped char.")),
+            ("\n", Err("EOF")),
         ];
         for (input, expected) in tests.iter() {
             let res = read_str(input);
             match expected {
-                Ok(message) => {
-                    println!("TESTING NORMAL OUTPUT");
+                Ok(out) => {
                     let output = format!("{}", res.unwrap());
-                    assert_eq!(*input, output.as_str());
+                    assert_eq!(*out, output.as_str());
                 },
                 Err(err) => {
-                    //let result = res.map_err(|e| { e.to_string() });
-                    println!("ERR MESSAGE: {:?}", res);
-                    assert_err!(res, err)
+                    match &res {
+                        Err(e) => {
+                            let e_str = &format!("{}", e);
+                            assert_eq!(e_str, err);
+                        },
+                        Ok(nodes) => {
+                            panic!("Expected error: {:?}, got RadNodes: {:?}.", err, nodes)
+                        }
+                    }
                 },
             }
 
@@ -132,11 +132,14 @@ fn read_list(tokens: &Tokens, mut pos: usize) -> (io::Result<RadNode>, usize)
     loop {
 
         _t = tokens.get(pos).map(|s| s.as_str());
-        _t.map(|t| println!("next list item: {:?}", t));
+        //_t.map(|t| println!("next list item: {:?}, pos: {}", t, pos));
 
         match _t {
             // end the list
-            Some(end) if end == end_token => break,
+            Some(end) if end == end_token => {
+                pos += 1;
+                break;
+            },
             None => {
                 let e = io::Error::new(
                     io::ErrorKind::UnexpectedEof, "EOF; Unterminated list!"
@@ -175,12 +178,23 @@ fn read_atom(tokens: &Tokens, pos: usize) -> (io::Result<RadNode>, usize)
 
     // string
     if text.starts_with('"') {
+        if text.len() == 1 || !text.ends_with('"') {
+            let e = io::Error::new(io::ErrorKind::InvalidInput, "EOF; No terminating quote on this string.");
+            return (Err(e), 0);
+        }
         rtype = RadType::String;
         let end = text.len()-1;
         text = &text[1..end];
 
     } else if NUMBER.is_match(text) {
         rtype = RadType::Number;
+
+    } else if text.starts_with('\\') {
+        if text.len() == 1 {
+            let e = io::Error::new(io::ErrorKind::InvalidInput, "EOF; Expected escaped char.");
+            return (Err(e), 0);
+        }
+        rtype = RadType::Char;
 
     // symbol
     } else {

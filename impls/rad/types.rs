@@ -18,6 +18,7 @@ pub enum RadType {
     String,
     Symbol,
     Number,
+    Char,
 }
 
 impl fmt::Display for RadNode {
@@ -32,6 +33,7 @@ impl fmt::Display for RadNode {
             RadType::String => write!(f, "\"{}\"", self.text),
             RadType::Symbol => write!(f, "{}", self.text),
             RadType::Number => write!(f, "{}", self.text),
+            RadType::Char =>   write!(f, "{}", self.text),
         }
     }
 }

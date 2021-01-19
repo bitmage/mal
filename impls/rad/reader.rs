@@ -3,6 +3,14 @@ use regex::Regex;
 
 use types::{RadNode, RadList, RadType};
 
+lazy_static! {static ref TOKEN: Regex = Regex::new(
+    r#"[\s,]*(~@|[\[\]{}()'`~^@]|"(?:\\.|[^\\"])*"?|;.*|[^\s\[\]{}('"`,;)]*)"#
+).unwrap();}
+
+lazy_static! {static ref NUMBER: Regex = Regex::new(
+    r#"^-?[0-9][0-9\.]+$"#
+).unwrap();}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -26,12 +34,19 @@ mod test {
     #[test]
     fn read_str_test() {
         let tests = [
-            ("(print 'hello')",
-                ()),
+            "(print \"hello\")",
+            "(print \"hello world\")",
+            "123",
+            "abc",
+            "(123 456)",
+            "(+ 2 (* 3 4))",
         ];
-        for (i, _rtypes) in tests.iter() {
-            let res = read_str(i).unwrap();
-            println!("read_str result: {} -> {}", i, res);
+        for (input) in tests.iter() {
+            let res = read_str(input).unwrap();
+            //println!("read_str result: {} -> {}", input, res);
+
+            let output = format!("{}", res);
+            assert_eq!(*input, output.as_str());
         }
     }
 }
@@ -39,24 +54,22 @@ mod test {
 type Tokens = Vec<String>;
 
 fn tokenize(input: &str) -> Tokens {
-    lazy_static! {static ref RE: Regex =
-        Regex::new(
-            r#"[\s,]*(~@|[\[\]{}()'`~^@]|"(?:\\.|[^\\"])*"?|;.*|[^\s\[\]{}('"`,;)]*)"#).unwrap();}
-    let matches = RE.find_iter(input).map(|mat| {
-        mat.as_str().trim().to_string()
-    }).collect();
-    matches
+    let tokens = TOKEN.captures_iter(input)
+        .filter_map(|caps| { caps.get(1) })
+        .map(|t| { t.as_str().trim().to_string() })
+        .collect();
+    tokens
 }
 
 pub fn read_str(input: &str) -> Option<RadNode> {
     let tokens = tokenize(input);
+    //println!("tokens: {:?}", tokens);
     let (list, _) = read_form(&tokens, 0);
     list
 }
 
 fn read_form(tokens: &Tokens, pos: usize) -> (Option<RadNode>, usize) {
     let token = &tokens.get(pos).map(|t| t.as_str());
-    token.map(|t| println!("read_form: {}", t));
     match token {
         Some("(") => read_list(tokens, pos),
         Some(_) => read_atom(tokens, pos),
@@ -66,14 +79,13 @@ fn read_form(tokens: &Tokens, pos: usize) -> (Option<RadNode>, usize) {
 
 fn read_list(tokens: &Tokens, mut pos: usize) -> (Option<RadNode>, usize)
 {
+    // skip the opening '('
+    pos += 1;
     let mut args = RadList::new();
-    //let src = Vec<String>::new();
 
     let mut _t: Option<&str> = None;
     loop {
 
-        // get the next token
-        pos += 1;
         _t = tokens.get(pos).map(|s| s.as_str());
 
         match _t {
@@ -91,7 +103,6 @@ fn read_list(tokens: &Tokens, mut pos: usize) -> (Option<RadNode>, usize)
         }
     }
     let node = RadNode {
-        src: "()".to_string(),
         text: "()".to_string(),
         rtype: RadType::List,
         args: args,
@@ -99,16 +110,32 @@ fn read_list(tokens: &Tokens, mut pos: usize) -> (Option<RadNode>, usize)
     (Some(node), pos)
 }
 
+
 fn read_atom(tokens: &Tokens, pos: usize) -> (Option<RadNode>, usize)
 {
     // this should be safe because we peek before getting here
-    let src = tokens.get(pos).unwrap();
+    let mut text = tokens[pos].as_str();
+    //println!("read_atom: {}", text);
 
-    //println!("read_atom: {}", src);
+    let rtype;
+
+    // string
+    if text.starts_with('"') {
+        rtype = RadType::String;
+        let end = text.len()-1;
+        text = &text[1..end];
+
+    } else if NUMBER.is_match(text) {
+        rtype = RadType::Number;
+
+    // symbol
+    } else {
+        rtype = RadType::Symbol;
+    }
+
     let node = RadNode {
-        src: src.to_string(),
-        text: src.to_string(),
-        rtype: RadType::RString,
+        text: text.to_string(),
+        rtype: rtype,
         args: RadList::new(),
     };
     (Some(node), pos + 1)

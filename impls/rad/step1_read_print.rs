@@ -5,24 +5,25 @@ mod reader;
 mod types;
 
 use std::io::{self, Write};
+use types::RadNode;
 
-fn read(input: &str) -> String {
-    input.to_string()
+fn read(text: &str) -> Option<RadNode> {
+    reader::read_str(text)
 }
 
-fn eval(input: &str) -> String {
-    format!("{:?}", reader::read_str(input))
+fn eval(tree: Option<RadNode>) -> Option<RadNode> {
+    tree
 }
 
-fn print(input: &str) -> String {
-    input.to_string()
+fn print(tree: Option<RadNode>) -> String {
+    tree.map_or("EOF".to_string(), |t| format!("{}", t))
 }
 
-fn rep(input: &str) -> String {
-    let first = read(&input);
-    let second = eval(&first);
-    let third = print(&second);
-    third
+fn rep(text: &str) -> String {
+    let tree = read(&text);
+    let results = eval(tree);
+    let output = print(results);
+    output
 }
 
 fn main() -> io::Result<()> {

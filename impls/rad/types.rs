@@ -5,7 +5,6 @@ pub type RadList = Vec<RadNode>;
 
 #[derive(Debug)]
 pub struct RadNode {
-    pub src: String,
     pub text: String,
     pub rtype: RadType,
     //src_line: usize,
@@ -16,8 +15,9 @@ pub struct RadNode {
 #[derive(Debug)]
 pub enum RadType {
     List,
-    RString,
+    String,
     Symbol,
+    Number,
 }
 
 impl fmt::Display for RadNode {
@@ -29,8 +29,9 @@ impl fmt::Display for RadNode {
                     .collect();
                 write!(f, "({})", inner.join(" "))
             },
+            RadType::String => write!(f, "\"{}\"", self.text),
             RadType::Symbol => write!(f, "{}", self.text),
-            RadType::RString => write!(f, "'{}'", self.text),
+            RadType::Number => write!(f, "{}", self.text),
         }
     }
 }

@@ -2,7 +2,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use io;
 
-use types::{RadNode, RadList, RadType};
+use types::{RadNode, RadList, RadType, ending_token, list_type};
 
 lazy_static! {static ref TOKEN: Regex = Regex::new(
     r#"[\s,]*(~@|[\[\]{}()'`~^@]|"(?:\\.|[^\\"])*"?|;.*|[^\s\[\]{}('"`,;)]*)"#
@@ -12,6 +12,15 @@ lazy_static! {static ref NUMBER: Regex = Regex::new(
     r#"^-?[0-9][0-9\.]+$"#
 ).unwrap();}
 
+lazy_static! {static ref ALL_FORWARD_SLASH: Regex = Regex::new(
+    r#"^\\+$"#
+).unwrap();}
+
+lazy_static! {static ref ODD_FORWARD_SLASH: Regex = Regex::new(
+    r#"^(?:\\\\)*\\$"#
+).unwrap();}
+
+#[allow(dead_code)]
 #[cfg(test)]
 mod test {
     use super::*;
@@ -59,7 +68,10 @@ mod test {
             ("(   + 1   3 )", Ok("(+ 1 3)")),
             ("\"abc", Err("EOF; No terminating quote on this string.")),
             ("\\", Err("EOF; Expected escaped char.")),
-            ("\n", Err("EOF")),
+            ("\\\\", Err("EOF; Expected escaped char.")),
+            ("\n", Err("Unexpected EOF.")),
+            (r#" "\" "#, Err("EOF; I don't like the cut of your jib.")),
+            (r#"'"#, Err("EOF; Quote what?")),
         ];
         for (input, expected) in tests.iter() {
             let res = read_str(input);
@@ -91,6 +103,7 @@ fn tokenize(input: &str) -> Tokens {
     let tokens = TOKEN.captures_iter(input)
         .filter_map(|caps| { caps.get(1) })
         .map(|t| { t.as_str().trim().to_string() })
+        .filter(|t| !t.is_empty())
         .collect();
     tokens
 }
@@ -106,6 +119,7 @@ fn read_form(tokens: &Tokens, pos: usize) -> (io::Result<RadNode>, usize) {
     let token = &tokens.get(pos).map(|t| t.as_str());
     match token {
         Some("(") | Some("[") | Some("{") => read_list(tokens, pos),
+        Some("'") => read_quote(tokens, pos),
         Some(_) => read_atom(tokens, pos),
         None => {
             let e = io::Error::new(io::ErrorKind::UnexpectedEof, "Unexpected EOF.");
@@ -114,17 +128,31 @@ fn read_form(tokens: &Tokens, pos: usize) -> (io::Result<RadNode>, usize) {
     }
 }
 
+// TODO: clean up signatures with io::Result<(RadNode, usize)> and then use ? for errors
 fn read_list(tokens: &Tokens, mut pos: usize) -> (io::Result<RadNode>, usize)
 {
     // get starting token to determine list type
-    let end_token = match tokens[pos].as_str() {
-        "(" => ")",
-        "[" => "]",
-        "{" => "}",
-        _ => ")",
+    let start_token = tokens[pos].as_str();
+    let end_token = match ending_token(start_token) {
+        Some(t) => t,
+        None => {
+            let e = io::Error::new(
+                io::ErrorKind::InvalidInput, "Bad Input; not a valid list token!"
+            );
+            return (Err(e), 0);
+        }
+    };
+    let ltype = match list_type(start_token) {
+        Some(t) => t,
+        None => {
+            let e = io::Error::new(
+                io::ErrorKind::InvalidInput, "Bad Input; not a valid list token!"
+            );
+            return (Err(e), 0);
+        }
     };
 
-    // skip the opening '('
+    // skip the start_token
     pos += 1;
     let mut args = RadList::new();
 
@@ -160,13 +188,48 @@ fn read_list(tokens: &Tokens, mut pos: usize) -> (io::Result<RadNode>, usize)
         }
     }
     let node = RadNode {
-        text: "()".to_string(),
-        rtype: RadType::List,
+        text: format!("{}{}", start_token, end_token),
+        rtype: ltype,
         args: args,
     };
     (Ok(node), pos)
 }
 
+fn read_quote(tokens: &Tokens, mut pos: usize) -> (io::Result<RadNode>, usize)
+{
+    // this should be safe because we peek before getting here
+    let text = tokens[pos].as_str();
+
+    // skip quote char
+    pos += 1;
+
+    let token = &tokens.get(pos).map(|t| t.as_str());
+    match token {
+        None => {
+            let e = io::Error::new(io::ErrorKind::InvalidInput, "EOF; Quote what?");
+            return (Err(e), 0);
+        },
+        Some(_) => {
+            // construct quote node
+            let mut node = RadNode {
+                text: text.to_string(),
+                rtype: RadType::Quote,
+                args: RadList::new(),
+            };
+            // read what is to be quoted
+            let (quoted, new_pos) = read_form(tokens, pos);
+
+            // assemble result and return
+            match quoted {
+                Ok(q) => {
+                    node.args.push(q);
+                    (Ok(node), new_pos)
+                },
+                Err(err) => (Err(err), new_pos)
+            }
+        }
+    }
+}
 
 fn read_atom(tokens: &Tokens, pos: usize) -> (io::Result<RadNode>, usize)
 {
@@ -182,15 +245,23 @@ fn read_atom(tokens: &Tokens, pos: usize) -> (io::Result<RadNode>, usize)
             let e = io::Error::new(io::ErrorKind::InvalidInput, "EOF; No terminating quote on this string.");
             return (Err(e), 0);
         }
+
+        // get rid of enclosing quotes
         rtype = RadType::String;
         let end = text.len()-1;
         text = &text[1..end];
+
+        // check to see if someone's playing with us
+        if ODD_FORWARD_SLASH.is_match(text) {
+            let e = io::Error::new(io::ErrorKind::InvalidInput, "EOF; I don't like the cut of your jib.");
+            return (Err(e), 0);
+        }
 
     } else if NUMBER.is_match(text) {
         rtype = RadType::Number;
 
     } else if text.starts_with('\\') {
-        if text.len() == 1 {
+        if text.len() == 1 || ALL_FORWARD_SLASH.is_match(text) {
             let e = io::Error::new(io::ErrorKind::InvalidInput, "EOF; Expected escaped char.");
             return (Err(e), 0);
         }

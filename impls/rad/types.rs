@@ -83,6 +83,13 @@ pub fn list_type(starting: &str) -> Option<RadType> {
     }
 }
 
+pub fn is_ending_token(token: &str) -> bool {
+    match token {
+        ")" | "]" | "}" => true,
+        _ => false
+    }
+}
+
 pub fn quote_type(starting: &str) -> Option<RadType> {
     match starting {
         "`" => Some(RadType::Quasiquote),

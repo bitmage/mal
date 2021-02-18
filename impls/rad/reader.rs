@@ -123,7 +123,7 @@ fn read_form(tokens: &Tokens, pos: usize) -> io::Result<(RadNode, usize)> {
         Some("(") | Some("[") | Some("{") => read_list(tokens, pos),
         Some("'") | Some("`") | Some("~") | Some("~@") | Some("@") =>
             read_quote(tokens, pos),
-        //Some("^") => read_meta(tokens, pos),
+        Some("^") => read_meta(tokens, pos),
         Some(_) => read_atom(tokens, pos),
         None => {
             let e = io::Error::new(io::ErrorKind::UnexpectedEof, "Unexpected EOF.");
@@ -165,14 +165,10 @@ fn read_list(tokens: &Tokens, mut pos: usize) -> io::Result<(RadNode, usize)>
 
             // process a list item
             Some(_) => {
-                match read_form(tokens, pos) {
-                    Ok((f, _pos)) => {
-                        args.push(f);
-                        pos = _pos;
-                        //println!("adding to args: {:?}", args)
-                    },
-                    Err(e) => return Err(e)
-                }
+                let (f, _pos) = read_form(tokens, pos)?;
+                args.push(f);
+                pos = _pos;
+                //println!("adding to args: {:?}", args)
             },
         }
     }
@@ -207,16 +203,45 @@ fn read_quote(tokens: &Tokens, mut pos: usize) -> io::Result<(RadNode, usize)>
                 args: RadList::new(),
             };
             // read what is to be quoted
-            let quoted = read_form(tokens, pos);
+            let (q, new_pos) = read_form(tokens, pos)?;
 
             // assemble result and return
-            match quoted {
-                Ok((q, new_pos)) => {
-                    node.args.push(q);
-                    Ok((node, new_pos))
-                },
-                Err(err) => Err(err)
-            }
+            node.args.push(q);
+            Ok((node, new_pos))
+
+        }
+    }
+}
+
+fn read_meta(tokens: &Tokens, mut pos: usize) -> io::Result<(RadNode, usize)>
+{
+    // skip quote char
+    pos += 1;
+
+    let token = &tokens.get(pos).map(|t| t.as_str());
+    match token {
+        None => {
+            let e = io::Error::new(io::ErrorKind::InvalidInput, "EOF; Meta for what?");
+            return Err(e)
+        },
+        Some(_) => {
+            // construct quote node
+            let mut node = RadNode {
+                text: "^".to_string(),
+                rtype: RadType::WithMeta,
+                args: RadList::new(),
+            };
+
+            // add meta to node
+            let (meta, new_pos) = read_form(tokens, pos)?;
+            node.args.push(meta);
+            pos = new_pos;
+
+            // add target form to node
+            // assemble result and return
+            let (form, new_pos) = read_form(tokens, pos)?;
+            node.args.push(form);
+            Ok((node, new_pos))
         }
     }
 }

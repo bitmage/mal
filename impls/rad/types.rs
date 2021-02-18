@@ -46,10 +46,11 @@ impl fmt::Display for RadNode {
             RadType::Char =>   write!(f, "'{}'", self.text),
             RadType::Quote | RadType::Quasiquote | RadType::Unquote | RadType:: SpliceUnquote | RadType::Deref => {
                 let word = quote_word(&self.rtype).unwrap();
-                let inner = format!("{}", self.args[0]);
-                write!(f, "({} {})", word, inner)
+                write!(f, "({} {})", word, self.args[0])
             },
-            RadType::WithMeta => write!(f, "'{}'", self.text),
+            RadType::WithMeta => {
+                write!(f, "(with-meta {} {})", self.args[1], self.args[0])
+            },
         }
     }
 }

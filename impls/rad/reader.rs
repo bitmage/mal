@@ -2,7 +2,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use io;
 
-use types::{RadNode, RadList, RadType, ending_token, list_type};
+use types::{RadNode, RadList, RadType, ending_token, list_type, quote_type};
 
 lazy_static! {static ref TOKEN: Regex = Regex::new(
     r#"[\s,]*(~@|[\[\]{}()'`~^@]|"(?:\\.|[^\\"])*"?|;.*|[^\s\[\]{}('"`,;)]*)"#
@@ -72,9 +72,12 @@ mod test {
             ("\n", Err("Unexpected EOF.")),
             (r#" "\" "#, Err("EOF; I don't like the cut of your jib.")),
             (r#"'"#, Err("EOF; Quote what?")),
+            ("'1", Ok("(quote 1)")),
+            ("`1", Ok("(quasiquote 1)")),
         ];
         for (input, expected) in tests.iter() {
             let res = read_str(input);
+            println!("result radtree: {:?}", res);
             match expected {
                 Ok(out) => {
                     let output = format!("{}", res.unwrap());
@@ -119,7 +122,9 @@ fn read_form(tokens: &Tokens, pos: usize) -> (io::Result<RadNode>, usize) {
     let token = &tokens.get(pos).map(|t| t.as_str());
     match token {
         Some("(") | Some("[") | Some("{") => read_list(tokens, pos),
-        Some("'") => read_quote(tokens, pos),
+        Some("'") | Some("`") | Some("~") | Some("~@") | Some("@") =>
+            read_quote(tokens, pos),
+        //Some("^") => read_meta(tokens, pos),
         Some(_) => read_atom(tokens, pos),
         None => {
             let e = io::Error::new(io::ErrorKind::UnexpectedEof, "Unexpected EOF.");
@@ -132,25 +137,10 @@ fn read_form(tokens: &Tokens, pos: usize) -> (io::Result<RadNode>, usize) {
 fn read_list(tokens: &Tokens, mut pos: usize) -> (io::Result<RadNode>, usize)
 {
     // get starting token to determine list type
+    // unwraps are safe as long as called by read_form
     let start_token = tokens[pos].as_str();
-    let end_token = match ending_token(start_token) {
-        Some(t) => t,
-        None => {
-            let e = io::Error::new(
-                io::ErrorKind::InvalidInput, "Bad Input; not a valid list token!"
-            );
-            return (Err(e), 0);
-        }
-    };
-    let ltype = match list_type(start_token) {
-        Some(t) => t,
-        None => {
-            let e = io::Error::new(
-                io::ErrorKind::InvalidInput, "Bad Input; not a valid list token!"
-            );
-            return (Err(e), 0);
-        }
-    };
+    let end_token = ending_token(start_token).unwrap();
+    let ltype = list_type(start_token).unwrap();
 
     // skip the start_token
     pos += 1;
@@ -199,6 +189,7 @@ fn read_quote(tokens: &Tokens, mut pos: usize) -> (io::Result<RadNode>, usize)
 {
     // this should be safe because we peek before getting here
     let text = tokens[pos].as_str();
+    let rtype = quote_type(text).unwrap();
 
     // skip quote char
     pos += 1;
@@ -213,7 +204,7 @@ fn read_quote(tokens: &Tokens, mut pos: usize) -> (io::Result<RadNode>, usize)
             // construct quote node
             let mut node = RadNode {
                 text: text.to_string(),
-                rtype: RadType::Quote,
+                rtype: rtype,
                 args: RadList::new(),
             };
             // read what is to be quoted

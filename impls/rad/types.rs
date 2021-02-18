@@ -22,6 +22,11 @@ pub enum RadType {
     Number,
     Char,
     Quote,
+    Quasiquote,
+    Unquote,
+    SpliceUnquote,
+    Deref,
+    WithMeta,
 }
 
 impl fmt::Display for RadNode {
@@ -38,11 +43,13 @@ impl fmt::Display for RadNode {
             RadType::String => write!(f, "\"{}\"", self.text),
             RadType::Symbol => write!(f, "{}", self.text),
             RadType::Number => write!(f, "{}", self.text),
-            RadType::Char =>   write!(f, "{}", self.text),
-            RadType::Quote =>  {
+            RadType::Char =>   write!(f, "'{}'", self.text),
+            RadType::Quote | RadType::Quasiquote | RadType::Unquote | RadType:: SpliceUnquote | RadType::Deref => {
+                let word = quote_word(&self.rtype).unwrap();
                 let inner = format!("{}", self.args[0]);
-                write!(f, "'{}", inner)
+                write!(f, "({} {})", word, inner)
             },
+            RadType::WithMeta => write!(f, "'{}'", self.text),
         }
     }
 }
@@ -75,3 +82,24 @@ pub fn list_type(starting: &str) -> Option<RadType> {
     }
 }
 
+pub fn quote_type(starting: &str) -> Option<RadType> {
+    match starting {
+        "`" => Some(RadType::Quasiquote),
+        "'" => Some(RadType::Quote),
+        "~" => Some(RadType::Unquote),
+        "~@" => Some(RadType::SpliceUnquote),
+        "@" => Some(RadType::Deref),
+        _ => None,
+    }
+}
+
+pub fn quote_word(starting: &RadType) -> Option<&'static str> {
+    match starting {
+        RadType::Quasiquote => Some("quasiquote"),
+        RadType::Quote => Some("quote"),
+        RadType::Unquote => Some("unquote"),
+        RadType::SpliceUnquote => Some("splice-unquote"),
+        RadType::Deref => Some("deref"),
+        _ => None,
+    }
+}

@@ -33,7 +33,7 @@ lazy_static! {static ref ODD_FORWARD_SLASH: Regex = Regex::new(
 mod test {
     use super::*;
 
-    //#[test]
+    #[test]
     fn tokenize_test() {
         let tests = [
             ("(print \"hello\")",

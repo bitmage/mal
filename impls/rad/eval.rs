@@ -1,34 +1,7 @@
 use std::collections::HashMap;
 use std::io;
 
-use types::{RadType, RadNode};
-
-//thread_local! {
-    //static PLACEHOLDER: RadNode = placeholder();
-//}
-
-//fn placeholder() -> RadNode {
-    //RadNode {
-        //text: "".to_string(),
-        //rtype: RadType::Placeholder,
-        //args: Vec::new(),
-    //}
-//}
-
-// I tried implementing eval_ast without clone... no joy
-// TODO: find out if this is possible/feasible?
-//fn swap_and_eval(node: &mut RadNode, ns: &ReplEnv) -> io::Result<()> {
-    //let mut result: io::Result<()> = Ok(());
-    //PLACEHOLDER.with(|mut arg| {
-        //mem::swap(node, &mut arg);
-        //match eval_ast(arg, ns) {
-            //Ok(a) => mem::swap(node, &mut arg),
-            //Err(e) => result = Err(e),
-        //}
-    //});
-    //result
-//}
-
+use types::{RadType, RadNode, RadList, error};
 
 #[allow(dead_code)]
 #[cfg(test)]
@@ -42,7 +15,8 @@ mod test {
     }
 }
 
-pub type ReplEnv = HashMap<&'static str, Box<dyn Fn(i64, i64) -> i64>>;
+pub type ReplFn = Box<dyn Fn(&Vec<&RadNode>) -> io::Result<RadNode>>;
+pub type ReplEnv = HashMap<&'static str, ReplFn>;
 
 pub fn init() -> ReplEnv {
     let mut repl_env: ReplEnv = HashMap::new();
@@ -56,13 +30,23 @@ pub fn init() -> ReplEnv {
 
 pub fn eval_ast(tree: &RadNode, ns: &ReplEnv) -> io::Result<RadNode> {
     match tree.rtype {
-        RadType::Symbol => Ok(*tree.clone()),
+        RadType::Symbol => Ok(tree.clone()),
         RadType::List => {
             for i in 0..tree.args.len() {
                 eval_ast(&tree.args[i], ns)?;
             }
-            Ok(*tree.clone())
+            // if we have a form at the beginning of the list
+            // then run it as a function
+            if let Some(form) = tree.args.get(1) {
+                match ns.get(form.text.as_str()) {
+                    Some(fun) => fun(&tree.args.iter().skip(1).collect()),
+                    None => error(format!("{} was not found in namespace!", form.text).as_str())
+                }
+            // otherwise return a copy of the list
+            } else {
+                Ok(tree.clone())
+            }
         },
-        _ => Ok(*tree.clone()),
+        _ => Ok(tree.clone()),
     }
 }

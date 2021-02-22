@@ -1,9 +1,10 @@
 use std::fmt;
+use std::io;
 
 //pub type RadLink = Option<Box<RadNode>>;
 pub type RadList = Vec<RadNode>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RadNode {
     pub text: String,
     pub rtype: RadType,
@@ -12,9 +13,8 @@ pub struct RadNode {
     pub args: RadList,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RadType {
-    Placeholder, // used by eval_ast
     List,
     Array,
     Map,
@@ -45,7 +45,6 @@ impl fmt::Display for RadNode {
             RadType::Symbol => write!(f, "{}", self.text),
             RadType::Number => write!(f, "{}", self.text),
             RadType::Char =>   write!(f, "'{}'", self.text),
-            RadType::Placeholder => write!(f, "EVAL_AST"),
             RadType::Quote | RadType::Quasiquote | RadType::Unquote | RadType:: SpliceUnquote | RadType::Deref => {
                 let word = quote_word(&self.rtype).unwrap();
                 write!(f, "({} {})", word, self.args[0])
@@ -112,4 +111,9 @@ pub fn quote_word(starting: &RadType) -> Option<&'static str> {
         RadType::Deref => Some("deref"),
         _ => None,
     }
+}
+
+pub fn error(text: &str) -> io::Result<RadNode> {
+    let e = io::Error::new(io::ErrorKind::UnexpectedEof, text.to_string());
+    Err(e)
 }

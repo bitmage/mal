@@ -7,27 +7,29 @@ mod eval;
 
 use std::io::{self, Write};
 use types::RadNode;
+use eval::{eval_ast};
 
 fn read(text: &str) -> io::Result<RadNode> {
     reader::read_str(text)
 }
 
-fn eval(tree: io::Result<RadNode>) -> io::Result<RadNode> {
-    tree
+fn eval(tree: io::Result<RadNode>, ns: &eval::ReplEnv) -> io::Result<RadNode> {
+    eval_ast(tree)
 }
 
 fn print(tree: io::Result<RadNode>) -> io::Result<String> {
     tree.map(|t| format!("{}", t))
 }
 
-fn rep(text: &str) -> io::Result<String> {
+fn rep(text: &str, ns: &eval::ReplEnv) -> io::Result<String> {
     let tree = read(&text);
-    let results = eval(tree);
+    let results = eval(tree, ns);
     let output = print(results);
     output
 }
 
 fn main() -> io::Result<()> {
+    let ns = eval::init();
     loop {
         print!("user> ");
         io::stdout().flush()?;
@@ -36,7 +38,7 @@ fn main() -> io::Result<()> {
         if result == 0 {
             break
         }
-        match rep(&input_buffer) {
+        match rep(&input_buffer, &ns) {
             Err(e) => println!("{}", e),
             Ok(result) => println!("{}", result),
         }

@@ -14,6 +14,7 @@ pub struct RadNode {
 
 #[derive(Debug)]
 pub enum RadType {
+    Placeholder, // used by eval_ast
     List,
     Array,
     Map,
@@ -44,6 +45,7 @@ impl fmt::Display for RadNode {
             RadType::Symbol => write!(f, "{}", self.text),
             RadType::Number => write!(f, "{}", self.text),
             RadType::Char =>   write!(f, "'{}'", self.text),
+            RadType::Placeholder => write!(f, "EVAL_AST"),
             RadType::Quote | RadType::Quasiquote | RadType::Unquote | RadType:: SpliceUnquote | RadType::Deref => {
                 let word = quote_word(&self.rtype).unwrap();
                 write!(f, "({} {})", word, self.args[0])

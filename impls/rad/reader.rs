@@ -4,12 +4,17 @@ use io;
 
 use types::{
     RadNode,
+    make_node,
     RadList,
-    RadType,
+    RadVal,
     ending_token,
-    list_type,
-    quote_type,
-    is_ending_token
+    make_list_val,
+    make_map_val,
+    make_meta_val,
+    make_quote_val,
+    is_map,
+    is_ending_token,
+    error_eof,
 };
 
 lazy_static! {static ref TOKEN: Regex = Regex::new(
@@ -151,13 +156,10 @@ fn read_list(tokens: &Tokens, mut pos: usize) -> io::Result<(RadNode, usize)>
     let end_token = ending_token(start_token).expect(
         format!("read_list got invalid start_token: {}", start_token).as_str()
     );
-    let ltype = list_type(start_token).expect(
-        format!("read_list got invalid start_token: {}", start_token).as_str()
-    );
 
     // skip the start_token
     pos += 1;
-    let mut args = RadList::new();
+    let mut items = RadList::new();
 
     let mut _t: Option<&str> = None;
     loop {
@@ -172,26 +174,27 @@ fn read_list(tokens: &Tokens, mut pos: usize) -> io::Result<(RadNode, usize)>
                 break;
             },
             None => {
-                let e = io::Error::new(
-                    io::ErrorKind::UnexpectedEof, "EOF; Unterminated list!"
-                );
-                return Err(e);
+                return Err(error_eof("EOF; Unterminated list!"));
             },
 
             // process a list item
             Some(_) => {
                 let (f, _pos) = read_form(tokens, pos)?;
-                args.push(f);
+                items.push(f);
                 pos = _pos;
                 //println!("adding to args: {:?}", args)
             },
         }
     }
-    let node = RadNode {
-        text: format!("{}{}", start_token, end_token),
-        rtype: ltype,
-        args: args,
+    let lval = if is_map(start_token) {
+        make_map_val(start_token, items)?
+    } else {
+        make_list_val(start_token, items)?
     };
+    let node = make_node(
+        format!("{}{}", start_token, end_token).as_str(),
+        lval,
+    );
     Ok((node, pos))
 }
 
@@ -199,24 +202,17 @@ fn read_quote(tokens: &Tokens, mut pos: usize) -> io::Result<(RadNode, usize)>
 {
     // this should be safe because we peek before getting here
     let text = tokens[pos].as_str();
-    let rtype = quote_type(text).unwrap();
 
     // skip quote char
     pos += 1;
 
     next_token_or_err(tokens, pos, "EOF; Quote what?")?;
 
-    // construct quote node
-    let mut node = RadNode {
-        text: text.to_string(),
-        rtype: rtype,
-        args: RadList::new(),
-    };
     // read what is to be quoted
     let (q, new_pos) = read_form(tokens, pos)?;
 
-    // assemble result and return
-    node.args.push(q);
+    // construct quote node
+    let node = make_node(text, make_quote_val(text, q)?);
     Ok((node, new_pos))
 }
 
@@ -241,23 +237,18 @@ fn read_meta(tokens: &Tokens, mut pos: usize) -> io::Result<(RadNode, usize)>
     pos += 1;
     next_token_or_err(tokens, pos, "EOF; Meta for what?")?;
 
-    // construct quote node
-    let mut node = RadNode {
-        text: "^".to_string(),
-        rtype: RadType::WithMeta,
-        args: RadList::new(),
-    };
 
     // add meta to node
     let (meta, new_pos) = read_form(tokens, pos)?;
-    node.args.push(meta);
     pos = new_pos;
 
     // add target form to node
     // assemble result and return
     next_token_or_err(tokens, pos, "EOF; Meta for what?")?;
     let (form, new_pos) = read_form(tokens, pos)?;
-    node.args.push(form);
+
+    // construct quote node
+    let node = make_node("^", make_meta_val(meta, form));
     Ok((node, new_pos))
 }
 
@@ -267,7 +258,7 @@ fn read_atom(tokens: &Tokens, pos: usize) -> io::Result<(RadNode, usize)>
     let mut text = tokens[pos].as_str();
     //println!("read_atom: {}", text);
 
-    let rtype;
+    let rval;
 
     // string
     if text.starts_with('"') {
@@ -277,7 +268,7 @@ fn read_atom(tokens: &Tokens, pos: usize) -> io::Result<(RadNode, usize)>
         }
 
         // get rid of enclosing quotes
-        rtype = RadType::String;
+        rval = RadVal::String;
         let end = text.len()-1;
         text = &text[1..end];
 
@@ -288,24 +279,20 @@ fn read_atom(tokens: &Tokens, pos: usize) -> io::Result<(RadNode, usize)>
         }
 
     } else if NUMBER.is_match(text) {
-        rtype = RadType::Number;
+        rval = RadVal::Number;
 
     } else if text.starts_with('\\') {
         if text.len() == 1 || ALL_FORWARD_SLASH.is_match(text) {
             let e = io::Error::new(io::ErrorKind::InvalidInput, "EOF; Expected escaped char.");
             return Err(e)
         }
-        rtype = RadType::Char;
+        rval = RadVal::Char;
 
     // symbol
     } else {
-        rtype = RadType::Symbol;
+        rval = RadVal::Symbol;
     }
 
-    let node = RadNode {
-        text: text.to_string(),
-        rtype: rtype,
-        args: RadList::new(),
-    };
+    let node = make_node(text, rval);
     Ok((node, pos + 1))
 }

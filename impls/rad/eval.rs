@@ -8,16 +8,15 @@ pub type ReplEnv = HashMap<&'static str, ReplFn>;
 
 pub fn init() -> ReplEnv {
     let mut repl_env: ReplEnv = HashMap::new();
-    // TODO: refactor types and then do a proper implementation
-    repl_env.insert("+", float_float_fn_float(Box::new(|a, b| a + b)));
-    repl_env.insert("-", float_float_fn_float(Box::new(|a, b| a - b)));
-    repl_env.insert("*", float_float_fn_float(Box::new(|a, b| a * b)));
-    repl_env.insert("/", float_float_fn_float(Box::new(|a, b| a / b)));
+    repl_env.insert("+", fn_float(Box::new(|a, b| a + b)));
+    repl_env.insert("-", fn_float(Box::new(|a, b| a - b)));
+    repl_env.insert("*", fn_float(Box::new(|a, b| a * b)));
+    repl_env.insert("/", fn_float(Box::new(|a, b| a / b)));
     repl_env
 }
 
-//pub fn float_float_fn_float(proc: impl Fn(f64, f64) -> f64) -> ReplFn {
-pub fn float_float_fn_float(proc: Box<dyn Fn(f64, f64) -> f64>) -> ReplFn {
+// helper for constructing a function that works with floats
+pub fn fn_float(proc: Box<dyn Fn(f64, f64) -> f64>) -> ReplFn {
     Box::new(move |args| {
         // convert args to nums, complaining if type conversion fails
         let mut num: f64 = 0.0;

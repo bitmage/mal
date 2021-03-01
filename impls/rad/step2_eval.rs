@@ -19,6 +19,10 @@ mod test {
     fn rep_test() {
         let tests: Vec<(&str, Result<&str, &str>)> = vec![
             ("(+ 1 3)", Ok("4")),
+            ("(- 4 6)", Ok("-2")),
+            ("(/ 100 3)", Ok("33.333333333333336")),
+            ("(* 6 4)", Ok("24")),
+            ("(/ 1 0)", Ok("inf")),
         ];
         let ns = eval::init();
         for (input, expected) in tests.iter() {

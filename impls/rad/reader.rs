@@ -15,6 +15,7 @@ use types::{
     is_map,
     is_ending_token,
     error_eof,
+    convert_error,
 };
 
 lazy_static! {static ref TOKEN: Regex = Regex::new(
@@ -174,7 +175,7 @@ fn read_list(tokens: &Tokens, mut pos: usize) -> io::Result<(RadNode, usize)>
                 break;
             },
             None => {
-                return Err(error_eof("EOF; Unterminated list!"));
+                return Err(error_eof("EOF; Unterminated list!".to_string()));
             },
 
             // process a list item
@@ -279,7 +280,8 @@ fn read_atom(tokens: &Tokens, pos: usize) -> io::Result<(RadNode, usize)>
         }
 
     } else if NUMBER.is_match(text) {
-        rval = RadVal::Number;
+        let num = text.parse::<f64>().map_err(convert_error)?;
+        rval = RadVal::Number(num);
 
     } else if text.starts_with('\\') {
         if text.len() == 1 || ALL_FORWARD_SLASH.is_match(text) {

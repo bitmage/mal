@@ -1,32 +1,48 @@
 use std::collections::HashMap;
 use std::io;
 
-use types::{RadVal, RadNode, error_invalid_data};
-
-#[allow(dead_code)]
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn repl_env_test() {
-        let env = init();
-        //assert_eq!(env["+"](1, 2), 3);
-    }
-}
+use types::{RadVal, RadNode, error_invalid_data, make_node, rtype_as_str};
 
 pub type ReplFn = Box<dyn Fn(&Vec<&RadNode>) -> io::Result<RadNode>>;
 pub type ReplEnv = HashMap<&'static str, ReplFn>;
 
 pub fn init() -> ReplEnv {
-    let repl_env: ReplEnv = HashMap::new();
+    let mut repl_env: ReplEnv = HashMap::new();
     // TODO: refactor types and then do a proper implementation
-    //repl_env.insert("+", Box::new(|a, b| a + b));
-    //repl_env.insert("-", Box::new(|a, b| a - b));
-    //repl_env.insert("*", Box::new(|a, b| a * b));
-    //repl_env.insert("/", Box::new(|a, b| a / b));
-
+    repl_env.insert("+", float_float_fn_float(Box::new(|a, b| a + b)));
+    repl_env.insert("-", float_float_fn_float(Box::new(|a, b| a - b)));
+    repl_env.insert("*", float_float_fn_float(Box::new(|a, b| a * b)));
+    repl_env.insert("/", float_float_fn_float(Box::new(|a, b| a / b)));
     repl_env
+}
+
+//pub fn float_float_fn_float(proc: impl Fn(f64, f64) -> f64) -> ReplFn {
+pub fn float_float_fn_float(proc: Box<dyn Fn(f64, f64) -> f64>) -> ReplFn {
+    Box::new(move |args| {
+        // convert args to nums, complaining if type conversion fails
+        let mut num: f64 = 0.0;
+        for (i, a) in args.iter().enumerate() {
+            match a.rval {
+                RadVal::Number(n) => {
+                    if i == 0 {
+                        num = n;
+                    } else {
+                        num = proc(num, n);
+                    }
+                },
+                _ => {
+                    let msg = format!(
+                        "{} is not a Number, it's a {}.",
+                        a, rtype_as_str(&a)
+                    );
+                    Err(error_invalid_data(msg))?;
+                }
+            }
+        }
+        // apply proc to any number of args
+        let num_str = num.to_string();
+        Ok(make_node(num_str.as_str(), RadVal::Number(num)))
+    })
 }
 
 pub fn eval_ast(tree: &RadNode, ns: &ReplEnv) -> io::Result<RadNode> {
@@ -43,7 +59,7 @@ pub fn eval_ast(tree: &RadNode, ns: &ReplEnv) -> io::Result<RadNode> {
                     Some(fun) => fun(&items.iter().skip(1).collect()),
                     None => {
                         let txt = format!("{} was not found in namespace!", form.text);
-                        Err(error_invalid_data(txt.as_str()))
+                        Err(error_invalid_data(txt))
                     }
                 }
             // otherwise return a copy of the list

@@ -23,7 +23,7 @@ lazy_static! {static ref TOKEN: Regex = Regex::new(
 ).unwrap();}
 
 lazy_static! {static ref NUMBER: Regex = Regex::new(
-    r#"^-?[0-9][0-9\.]+$"#
+    r#"^-?[0-9\.]+$"#
 ).unwrap();}
 
 lazy_static! {static ref ALL_FORWARD_SLASH: Regex = Regex::new(
@@ -38,6 +38,11 @@ lazy_static! {static ref ODD_FORWARD_SLASH: Regex = Regex::new(
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn regex_test() {
+        assert_eq!(NUMBER.is_match("6"), true);
+    }
 
     #[test]
     fn tokenize_test() {

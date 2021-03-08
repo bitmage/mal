@@ -193,7 +193,7 @@ fn read_list(tokens: &Tokens, mut pos: usize) -> io::Result<(RadNode, usize)>
         }
     }
     let lval = if is_map(start_token) {
-        make_map_val(start_token, items)?
+        make_map_val(items)
     } else {
         make_list_val(start_token, items)?
     };

@@ -23,6 +23,7 @@ mod test {
             ("(/ 100 3)", Ok("33.333333333333336")),
             ("(* 6 4)", Ok("24")),
             ("(/ 1 0)", Ok("inf")),
+            ("(+ 5 (* 2 3))", Ok("11")),
         ];
         let ns = eval::init();
         for (input, expected) in tests.iter() {

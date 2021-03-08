@@ -171,14 +171,8 @@ pub fn make_list_val(listchar: &str, items: RadList) -> io::Result<RadVal> {
     }
 }
 
-pub fn make_map_val(mapchar: &str, items: RadList) -> io::Result<RadVal> {
-    match mapchar {
-        "{" => Ok(RadVal::Map(list_to_map(items))),
-        _ => {
-            let txt = format!("Not a valid mapchar: {}", mapchar);
-            Err(error_invalid_data(txt))
-        },
-    }
+pub fn make_map_val(items: RadList) -> RadVal {
+    RadVal::Map(list_to_map(items))
 }
 
 pub fn list_to_map(list: RadList) -> RadMap {

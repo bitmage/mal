@@ -4,7 +4,6 @@ extern crate regex;
 mod reader;
 mod types;
 mod eval;
-mod env;
 
 use std::io::{self, Write};
 use types::RadNode;
@@ -20,13 +19,8 @@ mod test {
     fn rep_test() {
         let tests: Vec<(&str, Result<&str, &str>)> = vec![
             ("(+ 1 3)", Ok("4")),
-            ("(- 4 6)", Ok("-2")),
-            ("(/ 100 3)", Ok("33.333333333333336")),
-            ("(* 6 4)", Ok("24")),
-            ("(/ 1 0)", Ok("inf")),
-            ("(+ 5 (* 2 3))", Ok("11")),
         ];
-        let ns = env::init();
+        let ns = eval::init();
         for (input, expected) in tests.iter() {
             let res = rep(input, &ns);
             println!("result: {:?}", res);
@@ -56,7 +50,7 @@ fn read(text: &str) -> io::Result<RadNode> {
     reader::read_str(text)
 }
 
-fn eval(tree: RadNode, ns: &env::ReplEnv) -> io::Result<RadNode> {
+fn eval(tree: RadNode, ns: &eval::ReplEnv) -> io::Result<RadNode> {
     eval_ast(&tree, ns)
 }
 
@@ -64,14 +58,14 @@ fn print(tree: RadNode) -> String {
     format!("{}", tree)
 }
 
-fn rep(text: &str, ns: &env::ReplEnv) -> io::Result<String> {
+fn rep(text: &str, ns: &eval::ReplEnv) -> io::Result<String> {
     let tree = read(&text)?;
     let results = eval(tree, ns)?;
     Ok(print(results))
 }
 
 fn main() -> io::Result<()> {
-    let ns = env::init();
+    let ns = eval::init();
     loop {
         print!("user> ");
         io::stdout().flush()?;

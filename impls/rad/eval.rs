@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::io;
 
 use types::{
@@ -9,50 +8,9 @@ use types::{
     make_node,
     map_to_list,
     make_map_val,
-    rtype_as_str
 };
 
-pub type ReplFn = Box<dyn Fn(&Vec<&RadNode>) -> io::Result<RadNode>>;
-pub type ReplEnv = HashMap<&'static str, ReplFn>;
-
-pub fn init() -> ReplEnv {
-    let mut repl_env: ReplEnv = HashMap::new();
-    //TODO: I bet I could remove the Box::new()
-    repl_env.insert("+", fn_float(Box::new(|a, b| a + b)));
-    repl_env.insert("-", fn_float(Box::new(|a, b| a - b)));
-    repl_env.insert("*", fn_float(Box::new(|a, b| a * b)));
-    repl_env.insert("/", fn_float(Box::new(|a, b| a / b)));
-    repl_env
-}
-
-// helper for constructing a function that works with floats
-pub fn fn_float(proc: Box<dyn Fn(f64, f64) -> f64>) -> ReplFn {
-    Box::new(move |args| {
-        // convert args to nums, complaining if type conversion fails
-        let mut num: f64 = 0.0;
-        for (i, a) in args.iter().enumerate() {
-            match a.rval {
-                RadVal::Number(n) => {
-                    if i == 0 {
-                        num = n;
-                    } else {
-                        num = proc(num, n);
-                    }
-                },
-                _ => {
-                    let msg = format!(
-                        "{} is not a Number, it's a {}.",
-                        a, rtype_as_str(&a)
-                    );
-                    Err(error_invalid_data(msg))?;
-                }
-            }
-        }
-        // apply proc to any number of args
-        let num_str = num.to_string();
-        Ok(make_node(num_str.as_str(), RadVal::Number(num)))
-    })
-}
+use env::ReplEnv;
 
 // eval all the items in the list
 pub fn eval_all(items: &RadList, ns: &ReplEnv) -> io::Result<RadList> {
@@ -95,6 +53,7 @@ pub fn eval_ast(tree: &RadNode, ns: &ReplEnv) -> io::Result<RadNode> {
                 Ok(tree.clone())
             }
         },
+        // or return whatever we have unmodified
         _ => Ok(tree.clone()),
     }
 }
